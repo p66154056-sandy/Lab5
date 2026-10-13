@@ -39,12 +39,6 @@
       text-align: center;
     }
 
-    #stationSelect {
-      font-size: 16px;
-      transform: scale(1.15);
-      transform-origin: left center;
-    }
-
     /* THI */
     .row-info>div:nth-child(4) {
       text-align: center;
@@ -218,17 +212,11 @@
 <body>
   <div class="container">
 
-    <!-- 第一排：時間 + 測站選單 -->
+    <!-- 第一排：時間 + 固定測站說明 -->
     <div class="row-top">
       <div id="datetime">--</div>
-      <div>
-        <label for="stationSelect">選擇測站：</label>
-        <select id="stationSelect">
-          <option value="臺南">臺南（中西區）</option>
-          <option value="安南區">安南</option>
-          <option value="新營區">新營</option>
-          <option value="善化區">善化</option>
-        </select>
+      <div style="font-size:14px; text-align:right; line-height:1.6;">
+        空氣品質：臺南測站｜天氣：臺南氣象站
       </div>
     </div>
 
@@ -500,144 +488,78 @@
     }
 
 
-    async function loadWeather(station) {
-      const config = stationMap?.[station];
+    // 天氣固定使用臺南氣象站（467410），資料仍由 Render 後端 /api/cwa 取得。
+    async function loadWeather() {
       const el = document.getElementById("weather");
-
       try {
-        if (!el) throw new Error('頁面找不到 id="weather" 的元素');
-        if (!config) throw new Error(`找不到測站設定：${station}`);
-
         const res = await fetch(CWA_API, { cache: "no-store" });
-        if (!res.ok) throw new Error(`CWA HTTP ${res.status} ${res.statusText}`);
-
+        if (!res.ok) throw new Error(`CWA HTTP ${res.status}`);
         const payload = await res.json();
-        const list =
-          payload?.records?.Station ||
-          payload?.records?.station ||
-          payload?.records?.location ||
-          payload?.records?.Location ||
-          [];
+        const list = payload?.records?.Station || payload?.records?.station ||
+                     payload?.records?.location || payload?.records?.Location || [];
+        if (!Array.isArray(list) || list.length === 0) throw new Error("後端沒有回傳氣象測站資料");
 
-        if (!Array.isArray(list) || list.length === 0) {
-          throw new Error("氣象署回傳的測站清單是空的，請檢查 Render /api/cwa");
-        }
+        // 優先以臺南站站號查找；若資料版本站號不同，再以站名查找。
+        const st = list.find(x => String(x?.StationId ?? x?.stationId ?? x?.StationID ?? "").trim() === "467410") ||
+                   list.find(x => String(x?.StationName ?? x?.stationName ?? "").trim().includes("臺南"));
+        if (!st) throw new Error("找不到臺南氣象站（467410）");
 
-        // 天氣優先使用 weatherId；若該 ID 不在這份資料中，再嘗試 cwaId。
-        const idsToTry = [config.weatherId, config.cwaId]
-          .filter(Boolean)
-          .map(id => String(id).trim());
-
-        let st = null;
-        for (const id of idsToTry) {
-          st = list.find(x =>
-            String(x?.StationId ?? x?.stationId ?? "").trim() === id
-          );
-          if (st) break;
-        }
-
-        if (!st) {
-          throw new Error(`找不到天氣測站（已嘗試：${idsToTry.join(", ")}）`);
-        }
-
-        const weatherElement = st?.WeatherElement;
-        const w = weatherElement?.Weather ?? weatherElement?.weather;
-        const weatherText = String(w ?? "").trim();
-
-        if (!weatherText || weatherText === "-99") {
-          throw new Error(
-            `測站 ${st?.StationName ?? st?.stationName ?? st?.StationId} 的天氣欄位目前沒有有效資料`
-          );
-        }
-
-        const now = weatherElement?.Now ?? weatherElement?.now;
-        const rain = now?.Precipitation ?? now?.precipitation;
-        const extra = [];
-        if (rain !== undefined && rain !== null && String(rain) !== "-99" && String(rain) !== "") {
-          extra.push(`降雨 ${rain}`);
-        }
-
-        el.innerText = extra.length ? `${weatherText}｜${extra.join("｜")}` : weatherText;
+        const we = st.WeatherElement ?? st.weatherElement ?? {};
+        const weather = String(we.Weather ?? we.weather ?? "").trim();
+        if (!weather || weather === "-99") throw new Error("臺南氣象站目前沒有有效天氣描述");
+        const now = we.Now ?? we.now ?? {};
+        const rain = now.Precipitation ?? now.precipitation;
+        const rainText = rain !== undefined && rain !== null && String(rain).trim() !== "" && String(rain) !== "-99"
+          ? `｜降雨 ${rain}` : "";
+        el.innerText = `${weather}${rainText}`;
       } catch (e) {
         console.error("[CWA][WEATHER] load failed:", e);
-        if (el) el.innerText = `⚠ 天氣暫無資料：${e.message || e}`;
+        if (el) el.innerText = "⚠ 讀取失敗";
       }
     }
 
-    async function loadAQI(station) {
-  const aqiBox = document.getElementById("aqi");
-  aqiBox.innerText = "載入中…";
-  aqiBox.style.backgroundColor = "transparent";
+    // 空氣品質固定使用「臺南」測站，資料由 Render 後端 /api/aqi 取得。
+    async function loadAQI() {
+      const aqiBox = document.getElementById("aqi");
+      aqiBox.innerText = "載入中…";
+      aqiBox.style.backgroundColor = "transparent";
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/aqi`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const records = Array.isArray(data) ? data :
+          (data.records ?? data.result?.records ?? data.data?.records ?? data.result ?? data.data);
+        if (!Array.isArray(records)) throw new Error("後端回傳的空品資料格式不符");
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/api/aqi`);
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+        const record = records.find(r => String(r?.sitename ?? r?.SiteName ?? r?.station_name ?? "").trim() === "臺南") ||
+          records.find(r => String(r?.sitename ?? r?.SiteName ?? r?.station_name ?? "").trim().includes("臺南"));
+        if (!record) throw new Error("空品資料中找不到臺南測站");
+        const aqi = Number(record.aqi ?? record.AQI);
+        if (!Number.isFinite(aqi)) throw new Error("臺南測站 AQI 不是有效數字");
+        const status = record.status ?? record.Status ?? "";
+        aqiBox.innerText = `${aqi}${status ? `（${status}）` : ""}`;
+        aqiBox.style.backgroundColor = getAQIColor(aqi);
+      } catch (e) {
+        console.error("[AQI] 讀取失敗：", e);
+        aqiBox.innerText = "⚠ 讀取失敗";
+      }
     }
 
-    const data = await res.json();
-
-    // 相容不同的回傳資料結構
-    const records = Array.isArray(data)
-  ? data
-  : data.records ??
-    data.result?.records ??
-    data.data?.records;
-
-    if (!Array.isArray(records)) {
-      console.error("[AQI] API 回傳內容：", data);
-      throw new Error("找不到資料 records，請檢查 API 回傳格式");
-    }
-
-    const stationName = stationMap[station].aqi;
-
-    const record = records.find(
-      r => r.sitename === stationName
-    );
-
-    if (!record) {
-      console.error("[AQI] 找不到測站：", stationName);
-      console.log("[AQI] 可用欄位：", records[0]);
-      throw new Error(`找不到測站：${stationName}`);
-    }
-
-    const aqi = Number(record.aqi);
-
-    if (!Number.isFinite(aqi)) {
-      throw new Error("AQI 欄位不是有效數字");
-    }
-
-    aqiBox.innerText = `${aqi} (${record.status})`;
-    aqiBox.style.backgroundColor = getAQIColor(aqi);
-
-  } catch (e) {
-    console.error("[AQI] 讀取失敗：", e);
-    aqiBox.innerText = "⚠ 讀取失敗";
-  }
-}
-
-    function updateAll(station) {
+    // 溫度、濕度、THI、天氣與空品都固定使用臺南站，不再顯示下拉選單。
+    function updateAll() {
       latestTemp = null;
       latestHum = null;
       updateTHIBox();
-      loadTemp(station);
-      loadHumidity(station);
-      loadWeather(station);
-      loadAQI(station);
+      loadTemp("臺南");
+      loadHumidity("臺南");
+      loadWeather();
+      loadAQI();
     }
 
-    const defaultStation = "臺南";
-    updateAll(defaultStation);
-
-    document.getElementById("stationSelect").addEventListener("change", function () {
-      updateAll(this.value);
-    });
-
+    updateAll();
     setInterval(() => {
-      const currentStation = document.getElementById("stationSelect").value;
-      updateAll(currentStation);
-      console.log("⏳ 自動刷新完成，測站：" + currentStation);
+      updateAll();
+      console.log("⏳ 已更新臺南測站資料");
     }, 300000);
 
   </script>
