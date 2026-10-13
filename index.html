@@ -362,6 +362,7 @@
     };
 
     // ✅✅✅ 改：用 CWA O-A0001-001 抓溫濕度（一次抓完）
+    // 前端只呼叫 Render 後端；API 金鑰請只存放在 Render Environment Variables。
     const API_BASE_URL = "https://tainan-env-api.onrender.com";
     const CWA_API = `${API_BASE_URL}/api/cwa`;
 
@@ -500,18 +501,17 @@
 
 
     async function loadWeather(station) {
-      const stationId = stationMap?.[station]?.cwaId;
+      const config = stationMap?.[station];
       const el = document.getElementById("weather");
 
       try {
-        if (!el) throw new Error(`頁面找不到 id="weather" 的元素`);
-        if (!stationId) throw new Error(`stationMap[${station}] 沒有 cwaId`);
+        if (!el) throw new Error('頁面找不到 id="weather" 的元素');
+        if (!config) throw new Error(`找不到測站設定：${station}`);
 
         const res = await fetch(CWA_API, { cache: "no-store" });
         if (!res.ok) throw new Error(`CWA HTTP ${res.status} ${res.statusText}`);
 
         const payload = await res.json();
-
         const list =
           payload?.records?.Station ||
           payload?.records?.station ||
@@ -520,30 +520,47 @@
           [];
 
         if (!Array.isArray(list) || list.length === 0) {
-          throw new Error(`CWA records.Station 為空（回傳結構可能變了）`);
+          throw new Error("氣象署回傳的測站清單是空的，請檢查 Render /api/cwa");
         }
 
-        const st = list.find(x => String(x?.StationId).trim() === String(stationId).trim());
+        // 天氣優先使用 weatherId；若該 ID 不在這份資料中，再嘗試 cwaId。
+        const idsToTry = [config.weatherId, config.cwaId]
+          .filter(Boolean)
+          .map(id => String(id).trim());
+
+        let st = null;
+        for (const id of idsToTry) {
+          st = list.find(x =>
+            String(x?.StationId ?? x?.stationId ?? "").trim() === id
+          );
+          if (st) break;
+        }
+
         if (!st) {
-          // 🔎 幫你把前幾個站號印出來，方便立刻比對是不是你 stationId 寫錯
-          console.log("[CWA][WEATHER] first StationId:", list.slice(0, 10).map(s => s.StationId));
-          throw new Error(`CWA 找不到 stationId=${stationId}`);
+          throw new Error(`找不到天氣測站（已嘗試：${idsToTry.join(", ")}）`);
         }
 
-        const w = st?.WeatherElement?.Weather;
-        if (!w || w === "-99") throw new Error(`WeatherElement.Weather 無資料（值=${w}）`);
+        const weatherElement = st?.WeatherElement;
+        const w = weatherElement?.Weather ?? weatherElement?.weather;
+        const weatherText = String(w ?? "").trim();
 
-        // ✅ 想加更多資訊可開啟這段（不想就留 w）
-        const rain = st?.WeatherElement?.Now?.Precipitation;
-        const ws = st?.WeatherElement?.WindSpeed;
+        if (!weatherText || weatherText === "-99") {
+          throw new Error(
+            `測站 ${st?.StationName ?? st?.stationName ?? st?.StationId} 的天氣欄位目前沒有有效資料`
+          );
+        }
+
+        const now = weatherElement?.Now ?? weatherElement?.now;
+        const rain = now?.Precipitation ?? now?.precipitation;
         const extra = [];
-        if (rain && rain !== "-99") extra.push(`降雨 ${rain}`);
+        if (rain !== undefined && rain !== null && String(rain) !== "-99" && String(rain) !== "") {
+          extra.push(`降雨 ${rain}`);
+        }
 
-        el.innerText = extra.length ? `${w}｜${extra.join("｜")}` : w;
-
+        el.innerText = extra.length ? `${weatherText}｜${extra.join("｜")}` : weatherText;
       } catch (e) {
         console.error("[CWA][WEATHER] load failed:", e);
-        if (el) el.innerText = `⚠ 讀取失敗：${e.message || e}`;
+        if (el) el.innerText = `⚠ 天氣暫無資料：${e.message || e}`;
       }
     }
 
