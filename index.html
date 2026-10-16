@@ -20,10 +20,10 @@
       margin-bottom: 15px;
     }
 
-    /* ✅ 5 欄 */
+    /* 4 欄 */
     .row-info {
       display: grid;
-      grid-template-columns: 0.8fr 0.8fr 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1.2fr 1fr;
       gap: 6px;
     }
 
@@ -35,17 +35,13 @@
       text-align: center;
     }
 
+    /* 天氣 */
     .row-info>div:nth-child(3) {
       text-align: center;
     }
 
-    /* THI */
+    /* AQI */
     .row-info>div:nth-child(4) {
-      text-align: center;
-    }
-
-    /* 天氣 */
-    .row-info>div:nth-child(5) {
       text-align: right;
     }
 
@@ -56,14 +52,6 @@
       border-radius: 4px;
     }
 
-    /* THI 方框 */
-    #thi {
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 4px;
-      display: inline-block;
-    }
-
     .info-btn {
       margin-left: 8px;
       color: rgb(71, 134, 235);
@@ -71,12 +59,6 @@
       font-weight: bold;
       cursor: default;
       user-select: none;
-    }
-
-    /* ✅ THI 的ⓘ容器：讓 popover 以它為定位基準 */
-    .info-wrap {
-      position: relative;
-      display: inline-block;
     }
 
     /* 共用 popover 外觀（預設：AQI 仍用 fixed 右上角） */
@@ -99,21 +81,9 @@
       right: 20px;
     }
 
-    /* ✅ THI：出現在ⓘ右側，上緣對齊ⓘ */
-    .popover-right {
-      position: absolute;
-      top: -60px;
-      left: calc(100% + 8px);
-    }
-
     /* ✅ AQI：原本規則保留（ⓘ旁邊緊鄰 popover） */
     .info-btn:hover+.popover,
     .popover:hover {
-      display: block;
-    }
-
-    /* ✅ THI：改成 hover info-wrap 顯示（避免與上面規則衝突） */
-    .info-wrap:hover .popover {
       display: block;
     }
 
@@ -168,44 +138,6 @@
       background: rgba(126, 0, 35, 0.75);
       color: #fff;
     }
-
-    /* THI 色階 */
-    .thi1 {
-      background: rgba(0, 80, 200, 0.75);
-      color: #fff;
-    }
-
-    /* ≤10 */
-    .thi2 {
-      background: rgba(0, 150, 255, 0.75);
-      color: #fff;
-    }
-
-    /* 11–15 */
-    .thi3 {
-      background: rgba(0, 220, 255, 0.75);
-      color: #000;
-    }
-
-    /* 16–19 */
-    .thi4 {
-      background: rgba(0, 200, 80, 0.75);
-      color: #000;
-    }
-
-    /* 20–26 */
-    .thi5 {
-      background: rgba(255, 120, 180, 0.75);
-      color: #000;
-    }
-
-    /* 27–30 */
-    .thi6 {
-      background: rgba(255, 0, 0, 0.75);
-      color: #fff;
-    }
-
-    /* ≥31 */
   </style>
 </head>
 
@@ -220,31 +152,10 @@
       </div>
     </div>
 
-    <!-- 第二排：五個資訊 -->
+    <!-- 第二排：四個資訊 -->
     <div class="row-info">
       <div>🌡 溫度：<span id="temp">載入中…</span></div>
       <div>💧 濕度：<span id="humidity">載入中…</span></div>
-
-      <!-- THI -->
-      <div style="position:relative; display:inline-block;">
-        😊 THI：<span id="thi">載入中…</span>
-
-        <span class="info-wrap">
-          <span class="info-btn">ⓘ</span>
-          <div class="popover popover-right">
-            <b class="aqi-title">THI 分級說明</b>
-            <div class="aqi-grid">
-              <div class="aqi-level thi1">≤ 10 非常寒冷</div>
-              <div class="aqi-level thi2">11 – 15 寒冷</div>
-              <div class="aqi-level thi3">16 – 19 稍寒</div>
-              <div class="aqi-level thi4">20 – 26 舒適</div>
-              <div class="aqi-level thi5">27 – 30 悶熱</div>
-              <div class="aqi-level thi6">≥ 31 易中暑</div>
-            </div>
-          </div>
-        </span>
-      </div>
-
       <div>⛅ 天氣：<span id="weather">載入中…</span></div>
 
       <!-- AQI -->
@@ -288,58 +199,6 @@
       return "#7E0023";
     }
 
-    // THI 分級
-    function getTHILevel(thi) {
-      if (thi <= 10) return { label: "非常寒冷", cls: "thi1" };
-      if (thi <= 15) return { label: "寒冷", cls: "thi2" };
-      if (thi <= 19) return { label: "稍寒", cls: "thi3" };
-      if (thi <= 26) return { label: "舒適", cls: "thi4" };
-      if (thi <= 30) return { label: "悶熱", cls: "thi5" };
-      return { label: "易中暑", cls: "thi6" };
-    }
-
-    // ✅ 修正：RH 要用 0~1（RH/100），不然 Td/THI 會爆表
-    // Td = (RH/100)^(1/8) (112 + 0.9T) + 0.1T − 112
-    function calcTd(T, RH_percent) {
-      const RH = RH_percent / 100;
-      return Math.pow(RH, 1 / 8) * (112 + 0.9 * T) + 0.1 * T - 112;
-    }
-
-    // THI = T − 0.55[1 − exp(17.269Td/(Td+237.3))/exp(17.269T/(T+237.3))](T−14)
-    function calcTHI(T, Td) {
-      const a = Math.exp((17.269 * Td) / (Td + 237.3));
-      const b = Math.exp((17.269 * T) / (T + 237.3));
-      return T - 0.55 * (1 - a / b) * (T - 14);
-    }
-
-    let latestTemp = null;
-    let latestHum = null;
-
-    function updateTHIBox() {
-      const thiBox = document.getElementById("thi");
-      if (!thiBox) return;
-
-      if (!Number.isFinite(latestTemp) || !Number.isFinite(latestHum) || latestHum <= 0) {
-        thiBox.innerText = "載入中…";
-        thiBox.className = "";
-        thiBox.style.backgroundColor = "transparent";
-        return;
-      }
-
-      const Td = calcTd(latestTemp, latestHum);
-      const thi = calcTHI(latestTemp, Td);
-
-      const thiRounded = Math.round(thi * 10) / 10;
-      const lv = getTHILevel(thiRounded);
-
-      thiBox.innerText = `${thiRounded} (${lv.label})`;
-
-      // 清掉 inline 背景，避免蓋掉 class 背景
-      thiBox.style.backgroundColor = "";
-
-      thiBox.className = "";
-      thiBox.classList.add(lv.cls);
-    }
 
     // ✅✅✅ 改：測站 mapping（溫濕度改用 CWA stationId）
     const stationMap = {
@@ -455,14 +314,11 @@
         if (!Number.isFinite(t) || t === -99) throw new Error(`CWA 溫度無效：${t}`);
 
         document.getElementById("temp").innerText = `${t.toFixed(1)} °C`;
-        latestTemp = t;
-      } catch (e) {
+} catch (e) {
         console.error("[CWA][TEMP] load failed:", e);
         document.getElementById("temp").innerText = "⚠ 讀取失敗";
-        latestTemp = null;
-      } finally {
-        updateTHIBox();
-      }
+} finally {
+}
     }
 
     // ✅ 濕度（CWA）
@@ -477,14 +333,11 @@
         if (!Number.isFinite(h) || h === -99) throw new Error(`CWA 濕度無效：${h}`);
 
         document.getElementById("humidity").innerText = `${h.toFixed(0)} %`;
-        latestHum = h;
-      } catch (e) {
+} catch (e) {
         console.error("[CWA][HUM] load failed:", e);
         document.getElementById("humidity").innerText = "⚠ 讀取失敗";
-        latestHum = null;
-      } finally {
-        updateTHIBox();
-      }
+} finally {
+}
     }
 
 
@@ -545,12 +398,9 @@
       }
     }
 
-    // 溫度、濕度、THI、天氣與空品都固定使用臺南站，不再顯示下拉選單。
+    // 溫度、濕度、天氣與空品都固定使用臺南測站。
     function updateAll() {
-      latestTemp = null;
-      latestHum = null;
-      updateTHIBox();
-      loadTemp("臺南");
+loadTemp("臺南");
       loadHumidity("臺南");
       loadWeather();
       loadAQI();
